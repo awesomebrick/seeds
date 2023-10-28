@@ -1,0 +1,8 @@
+--- chording
+-- daani b. 9/20/2022
+-- in1: v/oct, root of chord
+-- in2: gate, triggers chord change
+-- out1: in1 piped out
+-- out2: first interval
+-- out3: second interval
+-- out4: final interval
