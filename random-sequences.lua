@@ -25,7 +25,7 @@ end
 function init()
 
 	print('setting up.')
-	input[1]{ mode = 'change', direction = 'rising' }
+	input[1].mode = 'change'
 	print('mode changed')
 	input[1].change = ansiblePlay(1, math.random()*5)
 	print('set up.')
