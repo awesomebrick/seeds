@@ -11,6 +11,8 @@
 -- out3: clock division C (default clk/8)
 -- out4: quantised voltage from in1 (default major)
 
+-------------------SCALES AND DEFINITIONS--------------------------
+
 major = {0,2,4,5,7,9,11}
 minor = {0,2,3,5,7,8,10}
 dorian = {0,2,3,5,7,9,10}
@@ -19,10 +21,10 @@ minPent = {0,3,5,7,10}
 
 --placeholder array, to show what scales are implemented.
 --TODO have this array also contain the actual scale arrays itself, so it's indexable for future functions.
-scaleOptions = {'major', 'minor', 'dorian', 'majPent', 'minPent'}
+scaleOptions = {['major'] = major, ['minor'] = minor, ['dorian'] = dorian, ['majPent'] = majPent, ['minPent'] = minPent}
 
 --public variables for visiblity to norns
-public{currentScale = 'major'}:options{'major', 'minor', 'dorian', 'majPent', 'minPent'}
+public{currentScale = 'major'}:options{'major', 'minor', 'dorian', 'majPent', 'minPent'}:action{changeScale}
 public.divisionA = 1
 public.divisionB = 4
 public.divisionC = 8
@@ -47,7 +49,6 @@ function scaleFunc (s)
 	output[4]()
 end
 
-
 -----------REPL FUNCTIONS------------
 --functions below this line are for REPL operation.
 --Useful for live coding.
@@ -56,11 +57,11 @@ end
 --TODO when scaleOptions() contains the actual scales, print those as well.
 function availableScales() 
 	for k,v in scaleOptions do
-		print(scaleOptions[v] .. ", ")
+		print(scaleOptions[k] .. ": " .. scaleOptions[v])
 	end
 end
 
 function changeScale (scale)
 	currentScale = scale
-  input[2].mode('scale', scale)
+  input[2].mode('scale', scaleOptions[scale])
 end
