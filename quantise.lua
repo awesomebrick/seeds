@@ -21,14 +21,23 @@ min = {0,2,3,5,7,8,10}
 dorian = {0,2,3,5,7,9,10}
 majPent = {0,2,4,7,9}
 
+selectedScale = maj
+
 function init()
-  input[1].mode('scale', majPent)
+  input[1].mode('scale', selectedScale)
+  input[2].mode('scale', selectedScale)
 
   input[1].scale = function(s)
     output[1].volts = s.volts
     print(input[1].volts .. " => ".. output[1].volts)
     output[2]()
   end
+  input[2].scale = function(s)
+    output[3].volts = s.volts
+    print(input[2].volts .. " => ".. output[3].volts)
+    output[4]()
+  end
 
   output[2].action = pulse()
+  output[4].action = pulse()
 end
