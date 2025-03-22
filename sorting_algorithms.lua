@@ -19,8 +19,13 @@
 seq_length = 32 -- length of the sequence
 -- TODO change this to just octaves? maybe put the 12 in the sequence generation function?
 note_range = 12 * 6 -- number of notes. 12tones for 6 octaves.
-resetOnCompletion = true -- generate a new sequence once the previous one has been played to sorted completion.
+manuallyResetSequence = false -- generate a new sequence once the previous one has been played to sorted completion.
 sortingAlgorithm = "mergesort" -- default sorting algo is mergesort.
+
+-- all ii stuff disabled by default.
+-- this script will generate a lot of commands at high clock speeds for the sequence, may hog the bus.
+jf_enabled = false
+wsyn_enabled = false 
 
 
 -- table of available preset scales.
@@ -36,7 +41,8 @@ allScales = {
 -- the keys are the algo names, the values are true, to speed up lookup times.
 allSortingAlgorithms = {
     mergesort = true,
-    bubblesort = true
+    bubblesort = true,
+    stalinsort = true
 }
 
 
@@ -52,11 +58,9 @@ so, we don't. instead of pinging notes as we see them in the algorithms (since t
 we use a separate array here, sorting_notes[], to store each value as it gets compared.
 this gives us the appearance of each note being played as it is being sorted, with the ability to iterate across it.
 the downside, obviously, is that on long sequences at worst case sorting, sorting_notes[] could get very large.
-i don't have an effective understanding of how large that would need to get before it's a problem,
-but given that crow's ram is uh, 64k? (unverified), and script storage takes 16k,
-i don't think sorting_notes[] size would be a problem until sequenceLength is greater than like, 100 i guess?
-but that's something tbd, and potentially to be tested. we'll edit the code to clamp for that once we know.
-as is, the script does warn you if you attempt to set the sequence length longer than 128 using the setter function. Still lets you do it though.
+crow reliably seems to run out of memory at a sequence length of about ~142
+as is, the script will warn you if you attempt to set the sequence length longer than 140 using the setter function, and clamp it down.
+This clamping does not occur if the sequence length is set >140 in the script itself, useful for testing purposes.
 ]]--
 
 
@@ -117,7 +121,7 @@ function mergeSort(arr) -- returns sorted array.
   return merge(L, R)
 end
 
--- bubblesort. implementation by @awesomebrick
+-- bubblesort. implementation [googled and altered] by @awesomebrick
 function bubbleSort(arr) -- sorts in place.
     local found_swap = true
     while found_swap do
@@ -133,14 +137,40 @@ function bubbleSort(arr) -- sorts in place.
     end
 end
 
+-- stalinsort. implemented by @awesomebrick
+-- i thought this would be funny and easy to implement lmao
+function stalinSort(arr) -- sorts in place (obviously)
+    local i = 1
+
+    while arr[i+1] do
+        table.insert(sorting_notes, arr[i])
+        table.insert(sorting_notes, arr[i+1])
+        if arr[i]<arr[i+1] then
+            i++
+        else -- if i+1 is smaller then.
+            table.remove(arr, i+1) -- get stalin'd
+        end
+    end
+    table.insert(sorting_notes, arr[i]) -- since we're doing while i+1 in the loop, we need to add the final item.
+end
+
 -- --- --- --- RUNNING FUNCTIONS --- --- --- --
 
 -- pings a note.
 -- TODO: implement JF and w/syn implementation (and corresponding activation vars/funcs)
+-- currently this runs the commands for either jf OR wsyn while also outputting on crow's hardware.
+-- i don't have JF to confirm, but doing both would kill the ii bus i imagine.
+-- JF has priority. Just arbitrarily, it doesn't really matter.
 function pingNote(note_number)
     output[1].volts = note_number / 12
     output[2]() -- trigger pulse()
     output[3]() -- trigger ar()
+
+    if jf_enabled then
+        ii.jf.play_note(note_number/12, 1)
+    elseif wsyn_enabled then
+        ii.wsyn.play_note(note_number/12, 1)
+    end
 
     --technically this gets called every ping which is terribly inefficient, 
     --but i'll be changing what the outputs all do later. so this is fine for now
@@ -155,7 +185,13 @@ end
 function step_sequence()
   idx = idx + 1 -- increment on each call
 
-  -- the var "sorted" which is used here is a bit of a misnomer. it doesn't indicate whether list sorting is complete, it indicates whether our sequence has run through the entirety of the sorting_notes table. the explanation for why sorting_notes exists is noted at the top of the SORTING ALGOS section. 
+  -- note:
+  --[[
+  the var "sorted" which is used here is a bit of a misnomer. it doesn't indicate that list is sorted, 
+  it indicates whether our sequence has run through the entirety of the sorting_notes table.
+  the explanation for why sorting_notes exists is at the top of the SORTING ALGOS section. 
+  ]]--
+
 
   -- run through the entirety of the sorting sequence before running the sorted list.
   if sorted == false and idx >= #sorting_notes then
@@ -163,19 +199,19 @@ function step_sequence()
     idx = 1
   end
 
-  -- if list is fully sorted then back to start, and generate new sequence.
-  if sorted == true and idx > #notes then
-    idx = 1
-    if resetOnCompletion then -- option to have it keep playing notes until reset.
-        reset_sequence()
-    end
-  end
-
   -- ping notes
   if sorted == true then -- if we've played through the sorting_notes list, switch to the sorted list.
     pingNote(notes[idx])
   elseif sorted == false then
     pingNote(sorting_notes[idx])
+  end
+
+  -- if we've completed running the original sorted list, start over with a new list.
+  if sorted == true and idx > #notes then
+    idx = 1
+    if ~manuallyResetSequence then -- option to require a manual sequence reset
+        reset_sequence()
+    end
   end
 end
 
@@ -210,12 +246,15 @@ function reset_sequence()
 end
 
 -- --- --- --- VARIABLE GETTERS AND SETTERS --- --- --- --
+-- all getters both return, and print to the REPL their respective values. No need to call print(getScale()) or anything like that.
 
 -- check the currently defined quantization scale.
 function getScale()
+    print(scale)
     return scale
 end
 
+-- technically this says get, but it just prints the allScales table. Returns nothing.
 function getAllScales()
     for k,v in pairs(allScales) do
         s = ""
@@ -248,6 +287,7 @@ function setScale(newScale)
     elseif type(newScale) == string then -- or, use one of the predefined scale options.
         if allScales[newScale] ~= nil then -- if item exists in the table,
             scale = allScales[newScale]
+            print("Now using scale"..scale)
             return
         else
             print("error: Option not defined in allScales table. Available scales are:")
@@ -287,14 +327,17 @@ function addScale(scaleName, scaleDefinition)
     --if all error checks pass, add items to table.
     allScales[scaleName] = scaleDefinition
     --let people know this addition will be lost on reset.
-    print("Added item to currently running allScales. This addition will be lost on power cycle or Crow reset. If you want this addition to persist, edit allScales in the code to include your scale.")
+    print("Added scale "..scaleName.." to currently running allScales. This addition will be lost on power cycle or Crow reset.")
+    print("If you want this addition to persist, edit allScales in the code to include your scale.")
     return
 end
 
 function getSeqLength()
+    print(seq_length)
     return seq_length
 end
 
+-- sets sequence length. Values greater than ~142 cause crow to run out of memory, so this function clamps it to 140
 function setSeqLength(newSeqLength)
 
     -- typechecking.
@@ -311,11 +354,13 @@ function setSeqLength(newSeqLength)
     end
 
     seq_length = newSeqLength
+    print("Sequence length set to "..seq_length)
     return
 end
 
 -- Return the octave range of generated notes.
 function getNoteRange()
+    print(noteRange/12)
     return note_range/12
 end
 
@@ -335,32 +380,63 @@ function setNoteRange(newOctaves)
     return
 end
 
+-- returns the currently active sorting algorithm.
 function getSortingAlgorithm()
+    print(sortingAlgorithm)
     return sortingAlgorithm
 end
 
--- selects a sorting algorithm.
+-- much like the similar function for allScales, this only prints and does not return a value.
+function getAllSortingAlgorithms()
+    for k,v in pairs(allSortingAlgorithms)
+    s = ""
+    s=s..k..", "
+    print(s)
+end
+
+-- selects a sorting algorithm. choose one from the list.
 function setSortingAlgorithm(newAlgo)
     if allSortingAlgorithms[newAlgo] == nil then
-        error(newAlgo .." is not an implemented algorithm.")
+        print(newAlgo .." is not an implemented algorithm.")
+        print("Available algorithms are: ")
+
         return
     end
 
     sortingAlgorithm = newAlgo
 end
 
--- sets whether or not the sequence automatically resets when sorted.
-function setResetOnCompletion(active)
+-- enables the manual sequence reset functionality.
+function enableManualReset(active=true)
     if type(active) ~= "boolean" then
         print("error: Value must be boolean.")
         return
     else
-        resetOnCompletion = active
+        manuallyResetSequence = active
     end
     return
 end
 
 
+-- enables ii commands for just friends
+function enableJF(active=true)
+    jf_enabled = active
+    if active then
+        print("ii.jf enabled.")
+    else
+        print("ii.jf disabled.")
+    end
+end
+
+-- enables ii commands for w/syn
+function enableWSyn(active=true)
+    wsyn_enabled = active
+    if active then
+        print("ii.wsyn enabled.")
+    else
+        print("ii.wsyn disabled.")
+    end
+end
 
 -- --- --- --- CROW INIT CODE --- --- --- --
 
