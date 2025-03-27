@@ -25,7 +25,7 @@ sortingAlgorithm = "mergesort" -- default sorting algo is mergesort.
 -- all ii stuff disabled by default.
 -- this script will generate a lot of commands at high clock speeds for the sequence, may hog the bus.
 jf_enabled = false
-wsyn_enabled = false 
+wsyn_enabled = true 
 
 
 -- table of available preset scales.
@@ -42,7 +42,7 @@ allScales = {
 allSortingAlgorithms = {
     mergesort = true,
     bubblesort = true,
-    stalinsort = true
+    stalinsort = false -- stalinsort doesn't seem to be working properly right now.
 }
 
 
@@ -141,17 +141,21 @@ end
 -- i thought this would be funny and easy to implement lmao
 function stalinSort(arr) -- sorts in place (obviously)
     local i = 1
+    table.insert(sorting_notes, arr[i])
+    i=i+1
 
-    while arr[i+1] do
+    while arr[i] do
+        --print(i)
+        --print(arr[i])
         table.insert(sorting_notes, arr[i])
-        table.insert(sorting_notes, arr[i+1])
-        if arr[i]<arr[i+1] then
-            i++
-        else -- if i+1 is smaller then.
+        --table.insert(sorting_notes, arr[i+1])
+        if arr[i]<arr[i-i] then -- if i+1 is smaller then.
             table.remove(arr, i+1) -- get stalin'd
+        else 
+            i=i+1 -- else it's fine. next item
         end
     end
-    table.insert(sorting_notes, arr[i]) -- since we're doing while i+1 in the loop, we need to add the final item.
+    --table.insert(sorting_notes, arr[i]) -- since we're doing while i+1 in the loop, we need to add the final item.
 end
 
 -- --- --- --- RUNNING FUNCTIONS --- --- --- --
@@ -162,6 +166,9 @@ end
 -- i don't have JF to confirm, but doing both would kill the ii bus i imagine.
 -- JF has priority. Just arbitrarily, it doesn't really matter.
 function pingNote(note_number)
+
+    --print(note_number)
+    
     output[1].volts = note_number / 12
     output[2]() -- trigger pulse()
     output[3]() -- trigger ar()
@@ -199,6 +206,14 @@ function step_sequence()
     idx = 1
   end
 
+  -- if we've completed running the original sorted list, start over with a new list.
+  if sorted == true and idx > #notes then
+    idx = 1
+    if manuallyResetSequence==false then -- option to require a manual sequence reset
+        reset_sequence()
+    end
+  end
+
   -- ping notes
   if sorted == true then -- if we've played through the sorting_notes list, switch to the sorted list.
     pingNote(notes[idx])
@@ -206,13 +221,7 @@ function step_sequence()
     pingNote(sorting_notes[idx])
   end
 
-  -- if we've completed running the original sorted list, start over with a new list.
-  if sorted == true and idx > #notes then
-    idx = 1
-    if ~manuallyResetSequence then -- option to require a manual sequence reset
-        reset_sequence()
-    end
-  end
+  
 end
 
 -- generates a new sequence of values.
@@ -388,9 +397,10 @@ end
 
 -- much like the similar function for allScales, this only prints and does not return a value.
 function getAllSortingAlgorithms()
-    for k,v in pairs(allSortingAlgorithms)
-    s = ""
-    s=s..k..", "
+    for k,v in pairs(allSortingAlgorithms) do
+        s = ""
+        s=s..k..", "
+    end
     print(s)
 end
 
@@ -407,19 +417,19 @@ function setSortingAlgorithm(newAlgo)
 end
 
 -- enables the manual sequence reset functionality.
-function enableManualReset(active=true)
-    if type(active) ~= "boolean" then
+function enableManualReset(resetActive)
+    if type(resetActive) ~= "boolean" then
         print("error: Value must be boolean.")
         return
     else
-        manuallyResetSequence = active
+        manuallyResetSequence = resetActive
     end
     return
 end
 
 
 -- enables ii commands for just friends
-function enableJF(active=true)
+function enableJF(active)
     jf_enabled = active
     if active then
         print("ii.jf enabled.")
@@ -429,7 +439,7 @@ function enableJF(active=true)
 end
 
 -- enables ii commands for w/syn
-function enableWSyn(active=true)
+function enableWSyn(active)
     wsyn_enabled = active
     if active then
         print("ii.wsyn enabled.")
